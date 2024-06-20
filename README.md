@@ -3,7 +3,7 @@ A simple command-line To-Do List application using SQLite3 for task management. 
 
 ## live video cast
 
-https://drive.google.com/file/d/1SuJGMuRZBfTPYW6u-D4K6HelnrpYMqM0/view?usp=sharing
+https://drive.google.com/file/d/176o6_FFEVJoz5lAgUiMI-nBEDAShlF_a/view?usp=sharing
 
 ## Features
 Add Task: Add a new task with a description and set its priority (normal, important, crucial).
