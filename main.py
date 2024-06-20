@@ -9,16 +9,28 @@ def connect_db():
         print(f"An error occurred connecting to the database: {e}")
         return None, None
 
-def create_table(c):
+def create_tables(c):
     try:
+        c.execute('''CREATE TABLE IF NOT EXISTS users
+                     (id INTEGER PRIMARY KEY, username TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS tasks
-                     (id INTEGER PRIMARY KEY, task TEXT, description TEXT, priority TEXT, completed INTEGER)''')
+                     (id INTEGER PRIMARY KEY, user_id INTEGER, task TEXT, description TEXT, priority TEXT, completed INTEGER,
+                     FOREIGN KEY(user_id) REFERENCES users(id))''')
     except sqlite3.Error as e:
-        print(f"An error occurred creating the table: {e}")
+        print(f"An error occurred creating the tables: {e}")
 
-def add_task(c, conn, task, description, priority):
+def add_user(c, conn, username):
     try:
-        c.execute("INSERT INTO tasks (task, description, priority, completed) VALUES (?, ?, ?, 0)", (task, description, priority))
+        c.execute("INSERT INTO users (username) VALUES (?)", (username,))
+        conn.commit()
+        print("User added successfully!")
+    except sqlite3.Error as e:
+        print(f"An error occurred: {e}")
+
+def add_task(c, conn, user_id, task, description, priority):
+    try:
+        c.execute("INSERT INTO tasks (user_id, task, description, priority, completed) VALUES (?, ?, ?, ?, 0)",
+                  (user_id, task, description, priority))
         conn.commit()
         print("Task added successfully!")
     except sqlite3.Error as e:
@@ -40,17 +52,28 @@ def mark_completed(c, conn, task_id):
     except sqlite3.Error as e:
         print(f"An error occurred: {e}")
 
-def display_tasks(c, filter_status=None):
+def display_tasks(c, user_id=None, filter_status=None):
     try:
-        if filter_status is None:
-            c.execute("SELECT * FROM tasks")
-        else:
-            c.execute("SELECT * FROM tasks WHERE completed=?", (filter_status,))
+        query = "SELECT * FROM tasks"
+        params = []
+
+        if user_id is not None:
+            query += " WHERE user_id=?"
+            params.append(user_id)
+
+            if filter_status is not None:
+                query += " AND completed=?"
+                params.append(filter_status)
+        elif filter_status is not None:
+            query += " WHERE completed=?"
+            params.append(filter_status)
+
+        c.execute(query, params)
         rows = c.fetchall()
         if rows:
             for row in rows:
-                status = "Completed" if row[4] else "Pending"
-                print(f"ID: {row[0]}, Task: {row[1]}, Description: {row[2]}, Priority: {row[3]}, Status: {status}")
+                status = "Completed" if row[5] else "Pending"
+                print(f"ID: {row[0]}, Task: {row[2]}, Description: {row[3]}, Priority: {row[4]}, Status: {status}")
         else:
             print("No tasks available.")
     except sqlite3.Error as e:
@@ -58,7 +81,8 @@ def display_tasks(c, filter_status=None):
 
 def edit_task(c, conn, task_id, new_task, new_description, new_priority):
     try:
-        c.execute("UPDATE tasks SET task=?, description=?, priority=? WHERE id=?", (new_task, new_description, new_priority, task_id))
+        c.execute("UPDATE tasks SET task=?, description=?, priority=? WHERE id=?",
+                  (new_task, new_description, new_priority, task_id))
         conn.commit()
         print("Task updated successfully!")
     except sqlite3.Error as e:
@@ -77,48 +101,56 @@ def main():
     if conn is None or c is None:
         return
 
-    create_table(c)
+    create_tables(c)
 
     while True:
-        print("\n1. Add task")
-        print("2. Remove task")
-        print("3. Mark task as completed")
-        print("4. Display all tasks")
-        print("5. Display completed tasks")
-        print("6. Display pending tasks")
-        print("7. Edit task description")
-        print("8. Clear all tasks")
-        print("9. Quit")
+        print("\n1. Add user")
+        print("2. Add task")
+        print("3. Remove task")
+        print("4. Mark task as completed")
+        print("5. Display all tasks")
+        print("6. Display completed tasks")
+        print("7. Display pending tasks")
+        print("8. Edit task description")
+        print("9. Clear all tasks")
+        print("10. Quit")
         choice = input("Choose an option: ")
 
         if choice == "1":
-            task = input("Enter task: ")
-            description = input("Enter description: ")
-            priority = input("Enter priority (l - normal, m - important, h - crucial): ").lower()
-            priority_map = {'l': 'normal', 'm': 'important', 'h': 'crucial'}
-            if priority in priority_map:
-                add_task(c, conn, task, description, priority_map[priority])
-            else:
-                print("Invalid priority. Task not added.")
+            username = input("Enter username: ")
+            add_user(c, conn, username)
         elif choice == "2":
+            try:
+                user_id = int(input("Enter user ID: "))
+                task = input("Enter task: ")
+                description = input("Enter description: ")
+                priority = input("Enter priority (l - normal, m - important, h - crucial): ").lower()
+                priority_map = {'l': 'normal', 'm': 'important', 'h': 'crucial'}
+                if priority in priority_map:
+                    add_task(c, conn, user_id, task, description, priority_map[priority])
+                else:
+                    print("Invalid priority. Task not added.")
+            except ValueError:
+                print("Invalid input. Please enter valid numbers.")
+        elif choice == "3":
             try:
                 task_id = int(input("Enter task ID to remove: "))
                 remove_task(c, conn, task_id)
             except ValueError:
                 print("Invalid ID. Please enter a valid number.")
-        elif choice == "3":
+        elif choice == "4":
             try:
                 task_id = int(input("Enter task ID to mark as completed: "))
                 mark_completed(c, conn, task_id)
             except ValueError:
                 print("Invalid ID. Please enter a valid number.")
-        elif choice == "4":
-            display_tasks(c)
         elif choice == "5":
-            display_tasks(c, filter_status=1)
+            display_tasks(c)
         elif choice == "6":
-            display_tasks(c, filter_status=0)
+            display_tasks(c, filter_status=1)
         elif choice == "7":
+            display_tasks(c, filter_status=0)
+        elif choice == "8":
             try:
                 task_id = int(input("Enter task ID to edit: "))
                 new_task = input("Enter new task description: ")
@@ -131,9 +163,9 @@ def main():
                     print("Invalid priority. Task not updated.")
             except ValueError:
                 print("Invalid ID. Please enter a valid number.")
-        elif choice == "8":
-            clear_tasks(c, conn)
         elif choice == "9":
+            clear_tasks(c, conn)
+        elif choice == "10":
             print("Quitting program. Goodbye!")
             break
         else:
